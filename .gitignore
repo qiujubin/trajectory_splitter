@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 运行时产物 (GUI 状态, 不入库)
+gui_state.json
+
+# 临时目录
+/tmp/
+/build/
+/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# 真实输入文件引用 (无文件, 仅 .xls 路径占位)

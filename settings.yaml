@@ -1,0 +1,32 @@
+# trajectory_splitter 默认配置
+#
+# 非敏感可调参数放这里; .env 只放密钥(本项目目前无密钥)。
+# 修改后需重启 GUI 生效 (有缓存)。
+
+split:
+  # 日前 (前半段) 默认从文件头切到 end_poi (start_poi 留空)。
+  first_half:
+    start_poi: ""                # 空 = 从文件头开始切
+    end_poi:   "【麻涌卸货地址】"  # 春梅里: 文件头 → 麻涌卸货点
+  # 日后 (后半段) 默认从 start_poi 最后一次出现 (时间 < noon_cutoff) 到 end_poi。
+  second_half:
+    start_poi: "【麻涌卸货地址】"
+    end_poi:   "【广州朴朴】"
+  # 日后段"最后一次 start_poi"的时间上限, HH:MM:SS, 留空字符串不限时间
+  noon_cutoff: "12:00:00"
+
+merge:
+  # 日后第一行新时间相对前半最后一条的间隔 (分钟)
+  time_gap_minutes: 1
+  # 输出文件名模板, 支持 {plate} (前半车牌)
+  filename_template: "1日前.xls"
+
+temperature:
+  # 超 [0, 4] 范围按传感器故障模式分段线性映射 (不用随机数, 保持温度曲线自然)
+  # (4, 12] 反向映射到 (4, 0]; (12, 28) 正向映射到 [0, 4);
+  # [28, +inf) 固定 4; [-8, 0) 反向映射到 (0, 4]; (-inf, -8) 固定 0
+  # 输出统一保留 1 位小数
+  clamp_to_0to4: true
+
+logging:
+  level: INFO
