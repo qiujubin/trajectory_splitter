@@ -1,12 +1,12 @@
 @echo off
-REM trajectory_splitter GUI 一键启动
-REM 双击本文件即可弹出 Tkinter 窗口
+REM trajectory_splitter GUI launcher
+REM Double-click this file to open the Tkinter window.
 REM
-REM 依赖:
+REM Requires:
 REM   - e:\DuDao\project_weixiu\.venv\Scripts\python.exe
-REM   - xlrd / xlwt / pyyaml / tkinter (内置)
+REM   - xlrd / xlwt / pyyaml / tkinter (built-in)
 REM
-REM 如果虚拟环境被移动, 改下面 VENV_PYTHON 这一行。
+REM If the venv has moved, update VENV_PYTHON below.
 
 set VENV_PYTHON=E:\DuDao\project_weixiu\.venv\Scripts\python.exe
 set PROJECT_ROOT=E:\DuDao\project_weixiu
@@ -15,7 +15,7 @@ cd /d "%PROJECT_ROOT%"
 "%VENV_PYTHON%" -m trajectory_splitter
 if errorlevel 1 (
     echo.
-    echo [trajectory_splitter] 启动失败, 错误码 %errorlevel%
-    echo 检查 venv 路径是否正确, 或运行 .venv\Scripts\pip install -r trajectory_splitter\requirements.txt
+    echo [trajectory_splitter] launch failed, error code %errorlevel%
+    echo check the venv path, or run: .venv\Scripts\pip install -r trajectory_splitter\requirements.txt
     pause
 )

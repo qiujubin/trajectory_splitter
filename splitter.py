@@ -27,6 +27,48 @@ from trajectory_splitter.xls_io import read_xls, write_xls
 logger = get_logger(__name__)
 
 
+import re as _re
+from datetime import datetime as _datetime
+
+
+# 文件名模板占位符 (按用户口述):
+#   {direction}     切片方向 (日前/后半)
+#   {plate}         第一行的车牌号 (sanitize 后的安全字符串)
+#   {date}          主要日期 (YYYY-MM-DD), 可用 {date:%m%d} 改格式 (strftime)
+#   其它 key 会抛 KeyError (模板写错时立刻报错)
+#
+# {date:fmt} 走 strptime("YYYY-MM-DD") + strftime(fmt); fmt 为空 = 默认 YYYY-MM-DD
+_DATE_FMT_RE = _re.compile(r"\{date(?::([^}]*))?\}")
+
+
+def _format_filename(
+    template: str,
+    *,
+    direction: str | None = None,
+    plate: str | None = None,
+    date: str | None = None,
+) -> str:
+    # 先处理 {date[:fmt]} 占位符 (str 类型的 format 不支持 strftime)
+    def _date_sub(m: _re.Match[str]) -> str:
+        if date is None:
+            raise KeyError("date")
+        fmt = m.group(1) or "%Y-%m-%d"
+        try:
+            return _datetime.strptime(date, "%Y-%m-%d").strftime(fmt)
+        except ValueError as e:
+            raise ValueError(f"模板里的 {m.group(0)!r} 无法解析 date={date!r}: {e}") from None
+
+    out = _DATE_FMT_RE.sub(_date_sub, template)
+
+    fmt_args: dict[str, str] = {}
+    if direction is not None:
+        fmt_args["direction"] = direction
+    if plate is not None:
+        fmt_args["plate"] = plate
+    # 不再让 str.format 处理 {date}, 已 sub 过了
+    return out.format(**fmt_args)
+
+
 COL_PLATE = "车牌号"
 COL_TIME = "定位时间"
 COL_TEMP1 = "温度1(℃)"
@@ -349,7 +391,19 @@ def split_at_poi(
     out_rows: list[list[Any]] = [OUTPUT_COLUMNS]
     out_rows.extend(_project_rows(selected, cols, temp_col, clamp_temp_to_0to4=clamp_temp_to_0to4))
 
-    out_name = filename_template.format(direction=direction)
+    # 单文件切片 = 一辆车, 用首行车牌给 {plate} 占位符 (跟 merge/modifier 同套 sanitization 逻辑)
+    plate_for_name = "unknown"
+    if cols["plate"] is not None and selected:
+        raw = selected[0][cols["plate"]] if cols["plate"] < len(selected[0]) else ""
+        if raw not in (None, ""):
+            plate_for_name = "".join(c for c in str(raw) if c.isalnum() or c in "_-") or "unknown"
+
+    out_name = _format_filename(
+        filename_template,
+        direction=direction,
+        plate=plate_for_name,
+        date=find_main_date(src_path)[0] if _DATE_FMT_RE.search(filename_template) else None,
+    )
     out_path = out_dir / out_name
     logger.info(
         "split_at_poi: 输出 %s 共 %d 行%s",

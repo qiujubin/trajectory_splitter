@@ -26,9 +26,12 @@ from trajectory_splitter.splitter import (
     COL_TEMP2,
     COL_TIME,
     OUTPUT_COLUMNS,
+    _DATE_FMT_RE,
     _clamp_temp,
     _find_header_col,
+    _format_filename,
     _read_main_sheet,
+    find_main_date,
     pick_temperature_column,
 )
 from trajectory_splitter.xls_io import read_xls, write_xls
@@ -162,7 +165,16 @@ def modify_xls(
     # 文件名: 车牌 (替换后的第一个) 走 {plate}
     first_plate = out_rows[1][1] if len(out_rows) > 1 else "unknown"
     safe_plate = "".join(c for c in str(first_plate) if c.isalnum() or c in "_-") or "unknown"
-    out_name = opts.filename_template.format(plate=safe_plate)
+    out_name = _format_filename(
+        opts.filename_template,
+        plate=safe_plate,
+        date=find_main_date(src_path)[0] if _DATE_FMT_RE.search(opts.filename_template) else None,
+    )
+    # modify 模板里没有 {direction} 语义
+    if "{direction}" in out_name or "{direction:" in out_name:
+        raise ValueError(
+            f"modify_xls 的 filename_template 不支持 {{direction}}: {opts.filename_template!r}"
+        )
     out_path = out_dir / out_name
 
     logger.info(

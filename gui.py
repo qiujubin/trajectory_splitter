@@ -140,10 +140,10 @@ class App:
             row=5, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出文件名模板 (用 {direction}):").grid(
+        ttk.Label(f, text="输出文件名模板 (用 {direction} / {plate} / {date}):").grid(
             row=6, column=0, sticky="w", pady=4,
         )
-        ttk.Entry(f, textvariable=self.split_tpl, width=25).grid(
+        ttk.Entry(f, textvariable=self.split_tpl, width=30).grid(
             row=6, column=1, sticky="w", padx=4,
         )
 
@@ -276,10 +276,10 @@ class App:
             row=3, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出文件名模板 (用 {plate}, 默认沿用 1日前.xls):").grid(
+        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(
             row=4, column=0, sticky="w", pady=4,
         )
-        ttk.Entry(f, textvariable=self.merge_tpl, width=25).grid(
+        ttk.Entry(f, textvariable=self.merge_tpl, width=30).grid(
             row=4, column=1, sticky="w", padx=4,
         )
 
@@ -385,8 +385,8 @@ class App:
         ttk.Label(f, text="随机种子 (空=真随机):").grid(row=6, column=0, sticky="w", pady=4)
         ttk.Entry(f, textvariable=self.mod_seed, width=10).grid(row=6, column=1, sticky="w", padx=4)
 
-        ttk.Label(f, text="输出文件名模板 (用 {plate}):").grid(row=7, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_tpl, width=25).grid(row=7, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(row=7, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_tpl, width=30).grid(row=7, column=1, sticky="w", padx=4)
 
         ttk.Label(f, text="输出目录:").grid(row=8, column=0, sticky="w", pady=4)
         ttk.Entry(f, textvariable=self.mod_out, width=55).grid(row=8, column=1, padx=4)

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>trajectory_splitter</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>trajectory_splitter <small>车辆轨迹切片 / 拼接 / 微改</small></h1>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button data-tab="split" class="active" role="tab">单文件切片</button>
+    <button data-tab="merge" role="tab">双文件拼接</button>
+    <button data-tab="modify" role="tab">数据微改</button>
+  </nav>
+
+  <main>
+    <!-- ============== Split tab ============== -->
+    <section id="tab-split" class="card" role="tabpanel">
+      <h2>单文件切片 — 按 POI 切两段</h2>
+
+      <div class="field">
+        <label for="split-src">输入 .xls<span class="hint">包含完整轨迹的源文件</span></label>
+        <div class="input-with-button">
+          <input type="text" id="split-src" placeholder="选择 .xls 文件..." />
+          <button id="pick-split-src" type="button">浏览...</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>方向</label>
+        <div class="radio-group">
+          <label><input type="radio" name="direction" value="日前" checked /> 日前 (前半段)</label>
+          <label><input type="radio" name="direction" value="后半" /> 后半 (后半段)</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="split-start-poi">
+          start_poi
+          <span class="hint" id="start-poi-hint">日前留空 = 从文件头</span>
+        </label>
+        <input type="text" id="split-start-poi" placeholder="【麻涌卸货地址】" />
+      </div>
+
+      <div class="field">
+        <label for="split-end-poi">
+          end_poi
+          <span class="hint" id="end-poi-hint">日前 = 麻涌卸货点</span>
+        </label>
+        <input type="text" id="split-end-poi" placeholder="【麻涌卸货地址】" />
+      </div>
+
+      <div class="field">
+        <label for="split-noon">
+          noon_cutoff
+          <span class="hint">后半段「最后一次 start_poi」时间上限 (HH:MM:SS)，空 = 不限</span>
+        </label>
+        <input type="text" id="split-noon" value="12:00:00" style="max-width: 140px;" />
+      </div>
+
+      <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" id="split-clamp" checked />
+          夹紧温度到 [0,4] (温和修正，按传感器故障模式分段)
+        </label>
+      </div>
+
+      <div class="field">
+        <label for="split-tpl">
+          输出文件名模板
+        </label>
+        <input type="text" id="split-tpl" value="{plate}_{direction}.xls" />
+        <div class="placeholders">
+          <span class="ph"><code>{plate}</code>车</span>
+          <span class="ph"><code>{direction}</code>方向</span>
+          <span class="ph"><code>{date}</code>主要日期</span>
+          <span class="ph"><code>{date:%m%d}</code>主要日期 (strftime)</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="split-out">输出目录</label>
+        <div class="input-with-button">
+          <input type="text" id="split-out" placeholder="选择输出目录..." />
+          <button id="pick-split-out" type="button">浏览...</button>
+        </div>
+      </div>
+
+      <div id="split-summary" class="summary">
+        <strong>主要日期</strong>
+        <span id="split-summary-date">—</span>
+        <span class="hint" id="split-summary-count"></span>
+      </div>
+
+      <div class="actions">
+        <button id="btn-preview" class="ghost" type="button">预览主要日期</button>
+        <span class="spacer"></span>
+        <button id="btn-run" class="primary" type="button">运行切片</button>
+      </div>
+    </section>
+
+    <!-- ============== Merge tab ============== -->
+    <section id="tab-merge" class="card" role="tabpanel" style="display:none">
+      <h2>双文件拼接 — 把前后两段拼成一份</h2>
+
+      <div class="field">
+        <label for="merge-first">前半 (日前) .xls<span class="hint">车牌从这份抽</span></label>
+        <div class="input-with-button">
+          <input type="text" id="merge-first" placeholder="选前半段 .xls..." />
+          <button id="pick-merge-first" type="button">浏览...</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="merge-second">后半 .xls<span class="hint">后半段文件，会自动改成前半的车牌</span></label>
+        <div class="input-with-button">
+          <input type="text" id="merge-second" placeholder="选后半段 .xls..." />
+          <button id="pick-merge-second" type="button">浏览...</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="merge-gap">
+          时间间隔 (分钟)
+          <span class="hint">后半首条相对前半末条的偏移</span>
+        </label>
+        <input type="text" id="merge-gap" value="1" style="max-width: 140px;" />
+      </div>
+
+      <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" id="merge-clamp" checked />
+          夹紧温度到 [0,4]
+        </label>
+      </div>
+
+      <div class="field">
+        <label for="merge-tpl">
+          输出文件名模板
+        </label>
+        <input type="text" id="merge-tpl" value="{plate}.xls" />
+        <div class="placeholders">
+          <span class="ph"><code>{plate}</code>车</span>
+          <span class="ph no"><code>{direction}</code>方向 (切片专用)</span>
+          <span class="ph"><code>{date}</code>主要日期</span>
+          <span class="ph"><code>{date:%m%d}</code>主要日期 (strftime)</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="merge-out">输出目录</label>
+        <div class="input-with-button">
+          <input type="text" id="merge-out" placeholder="选择输出目录..." />
+          <button id="pick-merge-out" type="button">浏览...</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <span class="spacer"></span>
+        <button id="btn-run-merge" class="primary" type="button">运行拼接</button>
+      </div>
+    </section>
+
+    <!-- ============== Modify tab ============== -->
+    <section id="tab-modify" class="card" role="tabpanel" style="display:none">
+      <h2>数据微改 — 车牌替换 + 时间偏移/微抖 + 温度微变</h2>
+
+      <div class="field">
+        <label for="mod-src">输入 .xls</label>
+        <div class="input-with-button">
+          <input type="text" id="mod-src" placeholder="选 .xls 文件..." />
+          <button id="pick-mod-src" type="button">浏览...</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>车牌: 旧 → 新<span class="hint">两格都填才替换 (整列相等才换)</span></label>
+        <div class="input-with-button">
+          <input type="text" id="mod-plate-old" placeholder="旧车牌" style="max-width: 200px;" />
+          <span style="align-self:center; color:var(--text-mute);">→</span>
+          <input type="text" id="mod-plate-new" placeholder="新车牌" style="max-width: 200px;" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="mod-offset">
+          时间整体偏移 (分钟)
+          <span class="hint">可正可负</span>
+        </label>
+        <input type="text" id="mod-offset" value="0" style="max-width: 140px;" />
+      </div>
+
+      <div class="field">
+        <label for="mod-time-jitter">
+          时间微抖 σ (秒/行)
+          <span class="hint">推荐 5-30, 默认 8</span>
+        </label>
+        <input type="text" id="mod-time-jitter" value="8" style="max-width: 140px;" />
+      </div>
+
+      <div class="field">
+        <label for="mod-temp-jitter">
+          温度微抖 ±Y (度)
+          <span class="hint">推荐 0.2-0.5, 默认 0.3</span>
+        </label>
+        <input type="text" id="mod-temp-jitter" value="0.3" style="max-width: 140px;" />
+      </div>
+
+      <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" id="mod-clamp" checked />
+          夹紧温度到 [0,4] (走分段映射规则)
+        </label>
+      </div>
+
+      <div class="field">
+        <label for="mod-seed">
+          随机种子
+          <span class="hint">留空 = 真随机，填数 = 可复现</span>
+        </label>
+        <input type="text" id="mod-seed" placeholder="(留空)" style="max-width: 140px;" />
+      </div>
+
+      <div class="field">
+        <label for="mod-tpl">
+          输出文件名模板
+        </label>
+        <input type="text" id="mod-tpl" value="{plate}_modified.xls" />
+        <div class="placeholders">
+          <span class="ph"><code>{plate}</code>车</span>
+          <span class="ph no"><code>{direction}</code>方向 (切片专用)</span>
+          <span class="ph"><code>{date}</code>主要日期</span>
+          <span class="ph"><code>{date:%m%d}</code>主要日期 (strftime)</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="mod-out">输出目录</label>
+        <div class="input-with-button">
+          <input type="text" id="mod-out" placeholder="选择输出目录..." />
+          <button id="pick-mod-out" type="button">浏览...</button>
+        </div>
+      </div>
+
+      <div class="actions">
+        <span class="spacer"></span>
+        <button id="btn-run-modify" class="primary" type="button">运行微改</button>
+      </div>
+    </section>
+
+    <!-- ============== Log (always visible, shared) ============== -->
+    <section class="card">
+      <h2>日志</h2>
+      <div id="status" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

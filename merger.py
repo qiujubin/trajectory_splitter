@@ -5,9 +5,10 @@
   - 日后第一行新时间 = 锚点
   - 日后整体时间偏移 offset = 锚点 - 日后第一行原时间
   - 通常 offset < 0 (日后第一行原时间 > 锚点, 即日后数据时间更晚, 平移让它"提前"接续)
-  - 如果日后第一行原时间 < 日前最后一行原时间, 说明切片顺序错了, 抛 ValueError
   - 跨天 (e.g. 前半 23:55, 后半原时间 00:05 第二天) 也走同一套逻辑:
     timedelta 自动跨天, 排序仍然按 datetime 比较。
+  - 跨日期/不同车的两段: offset 自动取正, 把后半段整个平移到前半末条之后;
+    仅打 logger.warning 提示用户关注, 不阻止 (因为操作本来就合法)。
 
 温度: 超 [0, 4] 范围按传感器故障模式分段线性映射 (不用随机数, 保持温度曲线自然),
       输出统一保留 1 位小数。详见 splitter._clamp_temp。
@@ -34,6 +35,7 @@ from trajectory_splitter.splitter import (
     pick_temperature_column,
 )
 from trajectory_splitter.logging_setup import get_logger
+from trajectory_splitter.splitter import _DATE_FMT_RE, _format_filename, find_main_date
 from trajectory_splitter.xls_io import write_xls
 
 
@@ -138,11 +140,14 @@ def merge_two(
     anchor = f_last_dt + timedelta(minutes=time_gap_minutes)
     offset = anchor - s_first_dt
 
-    # 验证: 日后第一行原时间不能早于日前最后一行原时间 (否则切片顺序错)
+    # 跨日期 / 不同车 拼接时 s_first_dt < f_last_dt 是合法的: offset 自动取正,
+    # 后半段整体平移到前半末条之后。仅打 warning 提示, 不阻止。
     if s_first_dt < f_last_dt:
-        raise ValueError(
-            f"日后第一行时间 {s_first_dt} 早于日前最后一行时间 {f_last_dt}, "
-            "说明切片顺序错了 (应该先日前再后半)"
+        gap_days = (f_last_dt - s_first_dt).total_seconds() / 86400
+        logger.warning(
+            "merge_two: 后半首条 (%s) 早于前半末条 (%s), 间隔 %.1f 天 — 走正向偏移自动接续; "
+            "如非预期, 检查是否把切片顺序搞反了",
+            s_first_dt, f_last_dt, gap_days,
         )
 
     # 平移 second 时间
@@ -170,7 +175,16 @@ def merge_two(
     )
     out_rows.extend(s_out)
 
-    out_name = filename_template.format(plate=safe_plate)
+    out_name = _format_filename(
+        filename_template,
+        plate=safe_plate,
+        date=find_main_date(first_path)[0] if _DATE_FMT_RE.search(filename_template) else None,
+    )
+    # merge 模板里没有 {direction} 语义, 拼错立刻报错
+    if "{direction}" in out_name or "{direction:" in out_name:
+        raise ValueError(
+            f"merge_two 的 filename_template 不支持 {{direction}}: {filename_template!r}"
+        )
     out_path = out_dir / out_name
     logger.info(
         "merge_two: 锚点=%s offset=%s clamp=%s 输出 %s 共 %d 行%s",
