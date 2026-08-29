@@ -131,7 +131,7 @@ class Api:
     def run_modify(self, params: dict) -> dict:
         """运行数据微改。
 
-        params keys: src, out_dir, output_plate,
+        params keys: src, out_dir, output_plate, output_main_date,
                      time_offset_minutes, time_jitter_seconds, temp_jitter,
                      clamp, round_to_minute, seed, tpl
         """
@@ -143,6 +143,7 @@ class Api:
             return {"ok": False, "error": "时间偏移/微抖/温度微抖都必须是数字"}
 
         out_plate = (params.get("output_plate") or "").strip()
+        out_main_date = (params.get("output_main_date") or "").strip()
 
         seed_raw = (params.get("seed") or "").strip()
         try:
@@ -154,6 +155,7 @@ class Api:
             time_offset_minutes=offset,
             time_jitter_seconds=jitter_s,
             temp_jitter=jitter_t,
+            output_main_date=out_main_date,
             output_plate=out_plate,
             round_to_minute=bool(params.get("round_to_minute", False)),
             clamp_temp_to_0to4=bool(params.get("clamp", True)),

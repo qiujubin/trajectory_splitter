@@ -1,12 +1,15 @@
-"""数据微改: 输入 .xls → 输出 车牌覆盖 + 时间偏移/微抖 + 温度微变, 严格递增。
+"""数据微改: 输入 .xls → 输出 主要日期平移 + 车牌覆盖 + 时间偏移/微抖 + 温度微变, 严格递增。
 
 不改业务列 (位置不动, 序号重排)。
 
-时间微抖: 整体偏移 (±N 分钟) + 每行正态微抖 (μ=0, σ=time_jitter_seconds),
-         然后强制严格递增 (如果新时间 ≤ 上一行, 用上一行 + 1秒)。
-         round_to_minute=True 时: 秒清零 + 同分钟冲突行丢弃 (不走严格递增)。
-温度微变: 每行均匀随机 ±temp_jitter 度, 输出走 _clamp_temp 映射, 仍在 [0,4]。
-车牌覆盖: 直接把每一行的车牌列整列覆盖成 output_plate (留空 = 不改)。
+流水线顺序 (重要! 后一步不会影响前一步的意图):
+  1) 主要日期平移 (output_main_date): 计算 delta = new - old, 整列 + delta 天
+     - 只动日期, 时分秒不动; 不同日期的行一起平移, 保持相对间距
+  2) 车牌覆盖 (output_plate): 整列覆盖成指定车牌
+  3) 时间微抖 (time_offset_minutes + time_jitter_seconds): 整体偏移 + 每行正态微抖
+     - 强制严格递增 (如果新时间 ≤ 上一行, 用上一行 + 1秒)
+     - round_to_minute=True 时: 秒清零 + 同分钟冲突行丢弃 (不走严格递增)
+  4) 温度微变 (temp_jitter): 每行均匀随机 ±Y 度, 输出走 _clamp_temp 映射, 仍在 [0,4]
 
 设置面板留默认值 (时间 ±5-30 秒, 温度 ±0.2-0.5 度)。
 """
@@ -44,10 +47,11 @@ logger = get_logger(__name__)
 @dataclass
 class ModifyOptions:
     """微改参数。"""
+    output_main_date: str = ""          # 输出主要日期 YYYY-MM-DD, 留空 = 不改; 改日期时整列 +delta 天
+    output_plate: str = ""             # 输出车牌 (留空 = 不改; 填了就整列覆盖)
     time_offset_minutes: int = 0       # 整体偏移 (分钟, 可正可负)
     time_jitter_seconds: float = 8.0   # 每行正态微抖 σ (秒), μ=0
     temp_jitter: float = 0.3           # 每行温度均匀随机 ±temp_jitter (度)
-    output_plate: str = ""             # 输出车牌 (留空 = 不改; 填了就整列覆盖)
     round_to_minute: bool = False      # 时间整点化: 秒清零 + 同分钟重复行丢弃
     filename_template: str = "1modified.xls"
     clamp_temp_to_0to4: bool = True    # 微变后再夹紧到 [0,4] 映射规则
@@ -103,7 +107,25 @@ def modify_xls(
     time_col = cols["time"]
     plate_col = cols["plate"]
 
-    # 1) 车牌覆盖 (留空 = 不改)
+    # 1) 主要日期平移 (留空 = 不改): 计算 delta = new - old, 整列 +delta 天
+    #    只动日期, 时分秒不动; 不同日期的行一起平移, 保持相对间距
+    date_delta = timedelta(0)
+    if opts.output_main_date:
+        try:
+            old_main_date_str, _ = find_main_date(src_path)
+            old_main_date = datetime.strptime(old_main_date_str, "%Y-%m-%d").date()
+            new_main_date = datetime.strptime(opts.output_main_date, "%Y-%m-%d").date()
+            date_delta = timedelta(days=(new_main_date - old_main_date).days)
+        except ValueError as e:
+            raise ValueError(
+                f"output_main_date 解析失败 (需 YYYY-MM-DD): {opts.output_main_date!r}"
+            ) from e
+        logger.info(
+            "modify_xls: 主要日期平移 %s -> %s (delta %+d 天)",
+            old_main_date_str, opts.output_main_date, date_delta.days,
+        )
+
+    # 2) 车牌覆盖 (留空 = 不改)
     plate_changes = 0
     if opts.output_plate:
         for row in data_rows:
@@ -111,7 +133,7 @@ def modify_xls(
                 row[plate_col] = opts.output_plate
                 plate_changes += 1
 
-    # 2) 时间: 整体偏移 + 每行正态微抖 + (整点化去重 / 严格递增)
+    # 3) 时间: 主要日期已平移 → 整体偏移 + 每行正态微抖 + (整点化去重 / 严格递增)
     overall = timedelta(minutes=opts.time_offset_minutes)
     prev_dt: datetime | None = None
     parsed: list[tuple[datetime, float]] = []  # (原dt, 抖动秒数)
@@ -129,6 +151,8 @@ def modify_xls(
             parsed.append((datetime.min, 0.0))
             keep_mask.append(False)
             continue
+        # 主要日期平移 (先于偏移/微抖, 保证不再被改回去)
+        dt = dt + date_delta
         # 正态微抖 (gauss σ)
         jitter = rng_normal.gauss(0.0, opts.time_jitter_seconds)
         new_dt = dt + overall + timedelta(seconds=jitter)

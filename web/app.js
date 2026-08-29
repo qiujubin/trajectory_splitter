@@ -221,6 +221,7 @@ function wireModifyTab() {
       src: $("#mod-src").value.trim(),
       out_dir: $("#mod-out").value.trim(),
       output_plate: $("#mod-output-plate").value.trim(),
+      output_main_date: $("#mod-output-main-date").value.trim(),
       time_offset_minutes: $("#mod-offset").value.trim(),
       time_jitter_seconds: $("#mod-time-jitter").value.trim(),
       temp_jitter: $("#mod-temp-jitter").value.trim(),

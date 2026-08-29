@@ -10,7 +10,7 @@
 命令行:    python -m trajectory_splitter.cli split|merge|main-date ...
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 from trajectory_splitter.config import Settings, get_settings, reset_settings_cache
 from trajectory_splitter.logging_setup import configure as configure_logging, get_logger

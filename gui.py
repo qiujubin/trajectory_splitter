@@ -34,7 +34,7 @@ MERGE_KEYS: list[str] = [
     "merge_tpl", "merge_out",
 ]
 MODIFY_KEYS: list[str] = [
-    "mod_src", "mod_out_plate",
+    "mod_src", "mod_out_plate", "mod_out_main_date",
     "mod_time_offset", "mod_time_jitter", "mod_temp_jitter",
     "mod_clamp", "mod_round_to_minute",
     "mod_tpl", "mod_out", "mod_seed",
@@ -385,6 +385,7 @@ class App:
 
         self.mod_src = tk.StringVar()
         self.mod_out_plate = tk.StringVar()
+        self.mod_out_main_date = tk.StringVar()
         self.mod_time_offset = tk.StringVar(value="0")
         self.mod_time_jitter = tk.StringVar(value="8")
         self.mod_temp_jitter = tk.StringVar(value="0.3")
@@ -405,36 +406,43 @@ class App:
             row=1, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="时间整体偏移 (分钟, 可正可负):").grid(row=2, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_time_offset, width=10).grid(row=2, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="输出主要日期 (YYYY-MM-DD, 留空 = 不改; 整列 +delta 天, 时分秒不动):").grid(
+            row=2, column=0, sticky="w", pady=4,
+        )
+        ttk.Entry(f, textvariable=self.mod_out_main_date, width=15).grid(
+            row=2, column=1, sticky="w", padx=4,
+        )
 
-        ttk.Label(f, text="时间微抖 σ (秒/行, 默认 8, 推荐 5-30):").grid(row=3, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_time_jitter, width=10).grid(row=3, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="时间整体偏移 (分钟, 可正可负):").grid(row=3, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_time_offset, width=10).grid(row=3, column=1, sticky="w", padx=4)
 
-        ttk.Label(f, text="温度微抖 ±Y 度 (推荐 0.2-0.5, 默认 0.3):").grid(row=4, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_temp_jitter, width=10).grid(row=4, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="时间微抖 σ (秒/行, 默认 8, 推荐 5-30):").grid(row=4, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_time_jitter, width=10).grid(row=4, column=1, sticky="w", padx=4)
 
-        ttk.Label(f, text="夹紧温度到 [0,4] (走分段映射规则):").grid(row=5, column=0, sticky="w", pady=4)
-        ttk.Checkbutton(f, variable=self.mod_clamp).grid(row=5, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="温度微抖 ±Y 度 (推荐 0.2-0.5, 默认 0.3):").grid(row=5, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_temp_jitter, width=10).grid(row=5, column=1, sticky="w", padx=4)
+
+        ttk.Label(f, text="夹紧温度到 [0,4] (走分段映射规则):").grid(row=6, column=0, sticky="w", pady=4)
+        ttk.Checkbutton(f, variable=self.mod_clamp).grid(row=6, column=1, sticky="w", padx=4)
 
         ttk.Label(f, text="整点化 (秒清零, 同分钟重复行丢弃):").grid(
-            row=6, column=0, sticky="w", pady=4,
+            row=7, column=0, sticky="w", pady=4,
         )
         ttk.Checkbutton(f, variable=self.mod_round_to_minute).grid(
-            row=6, column=1, sticky="w", padx=4,
+            row=7, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="随机种子 (空=真随机):").grid(row=7, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_seed, width=10).grid(row=7, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="随机种子 (空=真随机):").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_seed, width=10).grid(row=8, column=1, sticky="w", padx=4)
 
-        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(row=8, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_tpl, width=30).grid(row=8, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(row=9, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_tpl, width=30).grid(row=9, column=1, sticky="w", padx=4)
 
-        ttk.Label(f, text="输出目录:").grid(row=9, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_out, width=55).grid(row=9, column=1, padx=4)
-        ttk.Button(f, text="选目录", command=self._pick_mod_out).grid(row=9, column=2)
+        ttk.Label(f, text="输出目录:").grid(row=10, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_out, width=55).grid(row=10, column=1, padx=4)
+        ttk.Button(f, text="选目录", command=self._pick_mod_out).grid(row=10, column=2)
 
-        ttk.Button(f, text="运行", command=self._run_modify).grid(row=10, column=1, sticky="e", pady=8)
+        ttk.Button(f, text="运行", command=self._run_modify).grid(row=11, column=1, sticky="e", pady=8)
 
         log_frame = ttk.LabelFrame(parent, text="日志")
         log_frame.pack(fill="both", expand=True, padx=12, pady=8)
@@ -468,6 +476,7 @@ class App:
         seed = int(seed_raw) if seed_raw else None
 
         out_plate = self.mod_out_plate.get().strip()
+        out_main_date = self.mod_out_main_date.get().strip()
 
         tpl = self.mod_tpl.get().strip() or "1modified.xls"
 
@@ -475,6 +484,7 @@ class App:
             time_offset_minutes=offset,
             time_jitter_seconds=jitter_s,
             temp_jitter=jitter_t,
+            output_main_date=out_main_date,
             output_plate=out_plate,
             round_to_minute=self.mod_round_to_minute.get(),
             clamp_temp_to_0to4=self.mod_clamp.get(),

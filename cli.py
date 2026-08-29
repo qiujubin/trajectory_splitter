@@ -104,6 +104,10 @@ def main() -> int:
         help="输出车牌 (留空 = 不改; 填了就整列覆盖)",
     )
     p_mod.add_argument(
+        "--output-main-date", default="",
+        help="输出主要日期 (YYYY-MM-DD, 留空 = 不改; 填了就整列 +delta 天, 时分秒不动)",
+    )
+    p_mod.add_argument(
         "--round-to-minute", action="store_true",
         help="时间整点化: 秒清零 + 同分钟重复行丢弃",
     )
@@ -175,6 +179,7 @@ def main() -> int:
             time_offset_minutes=args.time_offset_minutes,
             time_jitter_seconds=args.time_jitter_seconds,
             temp_jitter=args.temp_jitter,
+            output_main_date=args.output_main_date,
             output_plate=args.output_plate,
             round_to_minute=args.round_to_minute,
             clamp_temp_to_0to4=args.clamp_temp_to_0to4,
