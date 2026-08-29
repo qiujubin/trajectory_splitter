@@ -24,7 +24,16 @@ from trajectory_splitter.merger import merge_two
 from trajectory_splitter.modifier import ModifyOptions, modify_xls
 
 
-WEB_DIR = Path(__file__).parent / "web"
+def _resolve_web_dir(fallback: Path) -> Path:
+    """PyInstaller onefile 启动时会解压到 sys._MEIPASS, web/ 资源跟着过去。
+    没打包时 (开发模式) 走 __file__ 同级目录。"""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass) / "web"
+    return fallback
+
+
+WEB_DIR = _resolve_web_dir(Path(__file__).parent / "web")
 
 
 class Api:
@@ -75,7 +84,8 @@ class Api:
     def run_split(self, params: dict) -> dict:
         """运行切片。
 
-        params keys: src, direction, out_dir, start_poi, end_poi, noon, clamp, tpl
+        params keys: src, direction, out_dir, start_poi, end_poi, noon,
+                     clamp, round_to_minute, tpl
         返回 {ok, out_path} 或 {ok:false, error}。
         """
         try:
@@ -87,6 +97,7 @@ class Api:
                 end_poi=(params.get("end_poi") or None),
                 noon_cutoff=(params.get("noon") or None),
                 clamp_temp_to_0to4=bool(params.get("clamp", True)),
+                round_to_minute=bool(params.get("round_to_minute", False)),
                 filename_template=(params.get("tpl") or "1{direction}.xls"),
             )
             return {"ok": True, "out_path": str(out_path)}
@@ -96,11 +107,13 @@ class Api:
     def run_merge(self, params: dict) -> dict:
         """运行双文件拼接。
 
-        params keys: first, second, out_dir, gap_minutes, clamp, tpl
+        params keys: first, second, out_dir, gap_minutes, output_plate,
+                     clamp, round_to_minute, tpl
         """
         try:
             gap_str = (params.get("gap_minutes") or "").strip() or "1"
             gap = int(gap_str)
+            out_plate = (params.get("output_plate") or "").strip() or None
             out_path = merge_two(
                 params["first"],
                 params["second"],
@@ -108,6 +121,8 @@ class Api:
                 time_gap_minutes=gap,
                 clamp_temp_to_0to4=bool(params.get("clamp", True)),
                 filename_template=(params.get("tpl") or "1日前.xls"),
+                output_plate=out_plate,
+                round_to_minute=bool(params.get("round_to_minute", False)),
             )
             return {"ok": True, "out_path": str(out_path)}
         except Exception as e:  # noqa: BLE001
@@ -116,9 +131,9 @@ class Api:
     def run_modify(self, params: dict) -> dict:
         """运行数据微改。
 
-        params keys: src, out_dir, plate_old, plate_new,
+        params keys: src, out_dir, output_plate,
                      time_offset_minutes, time_jitter_seconds, temp_jitter,
-                     clamp, seed, tpl
+                     clamp, round_to_minute, seed, tpl
         """
         try:
             offset = int((params.get("time_offset_minutes") or "0").strip() or "0")
@@ -127,13 +142,7 @@ class Api:
         except ValueError:
             return {"ok": False, "error": "时间偏移/微抖/温度微抖都必须是数字"}
 
-        plate_old = (params.get("plate_old") or "").strip()
-        plate_new = (params.get("plate_new") or "").strip()
-        if (not plate_old) != (not plate_new):
-            return {
-                "ok": False,
-                "error": "车牌替换: 旧车牌和新车牌要么都填, 要么都留空",
-            }
+        out_plate = (params.get("output_plate") or "").strip()
 
         seed_raw = (params.get("seed") or "").strip()
         try:
@@ -145,8 +154,8 @@ class Api:
             time_offset_minutes=offset,
             time_jitter_seconds=jitter_s,
             temp_jitter=jitter_t,
-            plate_old=plate_old,
-            plate_new=plate_new,
+            output_plate=out_plate,
+            round_to_minute=bool(params.get("round_to_minute", False)),
             clamp_temp_to_0to4=bool(params.get("clamp", True)),
             filename_template=(params.get("tpl") or "1modified.xls"),
             seed=seed,

@@ -25,16 +25,19 @@ from trajectory_splitter.modifier import ModifyOptions
 # 把 GUI 变量集中登记, 方便 load/save 一把梭
 SPLIT_KEYS: list[str] = [
     "split_src", "split_dir", "split_start_poi", "split_end_poi",
-    "split_noon", "split_clamp", "split_tpl", "split_out",
+    "split_noon", "split_clamp", "split_round_to_minute",
+    "split_tpl", "split_out",
 ]
 MERGE_KEYS: list[str] = [
     "merge_first", "merge_second", "merge_gap",
-    "merge_clamp", "merge_tpl", "merge_out",
+    "merge_clamp", "merge_round_to_minute",
+    "merge_tpl", "merge_out",
 ]
 MODIFY_KEYS: list[str] = [
-    "mod_src", "mod_plate_old", "mod_plate_new",
+    "mod_src", "mod_out_plate",
     "mod_time_offset", "mod_time_jitter", "mod_temp_jitter",
-    "mod_clamp", "mod_tpl", "mod_out", "mod_seed",
+    "mod_clamp", "mod_round_to_minute",
+    "mod_tpl", "mod_out", "mod_seed",
 ]
 
 
@@ -90,6 +93,7 @@ class App:
         self.split_end_poi = tk.StringVar()
         self.split_noon = tk.StringVar(value="12:00:00")
         self.split_clamp = tk.BooleanVar(value=True)
+        self.split_round_to_minute = tk.BooleanVar(value=False)
         self.split_tpl = tk.StringVar(value="1{direction}.xls")
         self.split_out = tk.StringVar()
 
@@ -140,26 +144,33 @@ class App:
             row=5, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出文件名模板 (用 {direction} / {plate} / {date}):").grid(
+        ttk.Label(f, text="整点化 (秒清零, 同分钟重复行丢弃):").grid(
             row=6, column=0, sticky="w", pady=4,
         )
-        ttk.Entry(f, textvariable=self.split_tpl, width=30).grid(
+        ttk.Checkbutton(f, variable=self.split_round_to_minute).grid(
             row=6, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出目录:").grid(row=7, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.split_out, width=55).grid(row=7, column=1, padx=4)
-        ttk.Button(f, text="选目录", command=self._pick_split_out).grid(row=7, column=2)
+        ttk.Label(f, text="输出文件名模板 (用 {direction} / {plate} / {date}):").grid(
+            row=7, column=0, sticky="w", pady=4,
+        )
+        ttk.Entry(f, textvariable=self.split_tpl, width=30).grid(
+            row=7, column=1, sticky="w", padx=4,
+        )
+
+        ttk.Label(f, text="输出目录:").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.split_out, width=55).grid(row=8, column=1, padx=4)
+        ttk.Button(f, text="选目录", command=self._pick_split_out).grid(row=8, column=2)
 
         ttk.Button(f, text="预览主要日期", command=self._preview_split).grid(
-            row=8, column=1, sticky="w", pady=8,
+            row=9, column=1, sticky="w", pady=8,
         )
         ttk.Button(f, text="运行", command=self._run_split).grid(
-            row=8, column=1, sticky="e", pady=8,
+            row=9, column=1, sticky="e", pady=8,
         )
 
         self.split_info = ttk.Label(f, text="(未选文件)", foreground="gray")
-        self.split_info.grid(row=9, column=1, sticky="w")
+        self.split_info.grid(row=10, column=1, sticky="w")
 
         log_frame = ttk.LabelFrame(parent, text="日志")
         log_frame.pack(fill="both", expand=True, padx=12, pady=8)
@@ -210,6 +221,7 @@ class App:
         end_poi = self.split_end_poi.get().strip()
         noon = self.split_noon.get().strip() or None
         clamp = self.split_clamp.get()
+        round_to_minute = self.split_round_to_minute.get()
         tpl = self.split_tpl.get().strip() or "1{direction}.xls"
         out_dir = self.split_out.get().strip()
         if not all([src, out_dir]):
@@ -229,6 +241,7 @@ class App:
                 noon_cutoff=noon,
                 clamp_temp_to_0to4=clamp,
                 filename_template=tpl,
+                round_to_minute=round_to_minute,
             )
         except Exception as e:  # noqa: BLE001
             messagebox.showerror("切片失败", str(e))
@@ -250,7 +263,9 @@ class App:
         self.merge_first = tk.StringVar()
         self.merge_second = tk.StringVar()
         self.merge_gap = tk.StringVar(value="1")
+        self.merge_out_plate = tk.StringVar()
         self.merge_clamp = tk.BooleanVar(value=True)
+        self.merge_round_to_minute = tk.BooleanVar(value=False)
         self.merge_tpl = tk.StringVar(value="1日前.xls")
         self.merge_out = tk.StringVar()
 
@@ -269,26 +284,40 @@ class App:
             row=2, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="夹紧温度到 [0,4] (温和修正, 不用随机数):").grid(
+        ttk.Label(f, text="输出车牌 (留空 = 用前半首行的车牌):").grid(
             row=3, column=0, sticky="w", pady=4,
         )
-        ttk.Checkbutton(f, variable=self.merge_clamp).grid(
+        ttk.Entry(f, textvariable=self.merge_out_plate, width=20).grid(
             row=3, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(
+        ttk.Label(f, text="夹紧温度到 [0,4] (温和修正, 不用随机数):").grid(
             row=4, column=0, sticky="w", pady=4,
         )
-        ttk.Entry(f, textvariable=self.merge_tpl, width=30).grid(
+        ttk.Checkbutton(f, variable=self.merge_clamp).grid(
             row=4, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出目录:").grid(row=5, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.merge_out, width=55).grid(row=5, column=1, padx=4)
-        ttk.Button(f, text="选目录", command=self._pick_merge_out).grid(row=5, column=2)
+        ttk.Label(f, text="整点化 (秒清零, 同分钟重复行丢弃):").grid(
+            row=5, column=0, sticky="w", pady=4,
+        )
+        ttk.Checkbutton(f, variable=self.merge_round_to_minute).grid(
+            row=5, column=1, sticky="w", padx=4,
+        )
+
+        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(
+            row=6, column=0, sticky="w", pady=4,
+        )
+        ttk.Entry(f, textvariable=self.merge_tpl, width=30).grid(
+            row=6, column=1, sticky="w", padx=4,
+        )
+
+        ttk.Label(f, text="输出目录:").grid(row=7, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.merge_out, width=55).grid(row=7, column=1, padx=4)
+        ttk.Button(f, text="选目录", command=self._pick_merge_out).grid(row=7, column=2)
 
         ttk.Button(f, text="运行", command=self._run_merge).grid(
-            row=6, column=1, sticky="e", pady=8,
+            row=8, column=1, sticky="e", pady=8,
         )
 
         log_frame = ttk.LabelFrame(parent, text="日志")
@@ -315,7 +344,9 @@ class App:
         first = self.merge_first.get().strip()
         second = self.merge_second.get().strip()
         gap_str = self.merge_gap.get().strip()
+        out_plate = self.merge_out_plate.get().strip() or None
         clamp = self.merge_clamp.get()
+        round_to_minute = self.merge_round_to_minute.get()
         tpl = self.merge_tpl.get().strip() or "1日前.xls"
         out_dir = self.merge_out.get().strip()
         if not all([first, second, gap_str, out_dir]):
@@ -332,6 +363,8 @@ class App:
                 time_gap_minutes=gap,
                 clamp_temp_to_0to4=clamp,
                 filename_template=tpl,
+                output_plate=out_plate,
+                round_to_minute=round_to_minute,
             )
         except Exception as e:  # noqa: BLE001
             messagebox.showerror("拼接失败", str(e))
@@ -351,12 +384,12 @@ class App:
         f.pack(fill="x")
 
         self.mod_src = tk.StringVar()
-        self.mod_plate_old = tk.StringVar()
-        self.mod_plate_new = tk.StringVar()
+        self.mod_out_plate = tk.StringVar()
         self.mod_time_offset = tk.StringVar(value="0")
         self.mod_time_jitter = tk.StringVar(value="8")
         self.mod_temp_jitter = tk.StringVar(value="0.3")
         self.mod_clamp = tk.BooleanVar(value=True)
+        self.mod_round_to_minute = tk.BooleanVar(value=False)
         self.mod_tpl = tk.StringVar(value="1modified.xls")
         self.mod_out = tk.StringVar()
         self.mod_seed = tk.StringVar(value="")
@@ -365,10 +398,12 @@ class App:
         ttk.Entry(f, textvariable=self.mod_src, width=55).grid(row=0, column=1, padx=4)
         ttk.Button(f, text="选文件", command=self._pick_mod_src).grid(row=0, column=2)
 
-        ttk.Label(f, text="车牌: 旧 → 新 (留空=不替换):").grid(row=1, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_plate_old, width=14).grid(row=1, column=1, sticky="w", padx=4)
-        ttk.Label(f, text="→").grid(row=1, column=1, sticky="w", padx=(120, 0))
-        ttk.Entry(f, textvariable=self.mod_plate_new, width=14).grid(row=1, column=1, sticky="w", padx=(140, 0))
+        ttk.Label(f, text="输出车牌 (留空 = 不改; 填了就覆盖所有行):").grid(
+            row=1, column=0, sticky="w", pady=4,
+        )
+        ttk.Entry(f, textvariable=self.mod_out_plate, width=20).grid(
+            row=1, column=1, sticky="w", padx=4,
+        )
 
         ttk.Label(f, text="时间整体偏移 (分钟, 可正可负):").grid(row=2, column=0, sticky="w", pady=4)
         ttk.Entry(f, textvariable=self.mod_time_offset, width=10).grid(row=2, column=1, sticky="w", padx=4)
@@ -382,17 +417,24 @@ class App:
         ttk.Label(f, text="夹紧温度到 [0,4] (走分段映射规则):").grid(row=5, column=0, sticky="w", pady=4)
         ttk.Checkbutton(f, variable=self.mod_clamp).grid(row=5, column=1, sticky="w", padx=4)
 
-        ttk.Label(f, text="随机种子 (空=真随机):").grid(row=6, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_seed, width=10).grid(row=6, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="整点化 (秒清零, 同分钟重复行丢弃):").grid(
+            row=6, column=0, sticky="w", pady=4,
+        )
+        ttk.Checkbutton(f, variable=self.mod_round_to_minute).grid(
+            row=6, column=1, sticky="w", padx=4,
+        )
 
-        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(row=7, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_tpl, width=30).grid(row=7, column=1, sticky="w", padx=4)
+        ttk.Label(f, text="随机种子 (空=真随机):").grid(row=7, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_seed, width=10).grid(row=7, column=1, sticky="w", padx=4)
 
-        ttk.Label(f, text="输出目录:").grid(row=8, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.mod_out, width=55).grid(row=8, column=1, padx=4)
-        ttk.Button(f, text="选目录", command=self._pick_mod_out).grid(row=8, column=2)
+        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(row=8, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_tpl, width=30).grid(row=8, column=1, sticky="w", padx=4)
 
-        ttk.Button(f, text="运行", command=self._run_modify).grid(row=9, column=1, sticky="e", pady=8)
+        ttk.Label(f, text="输出目录:").grid(row=9, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.mod_out, width=55).grid(row=9, column=1, padx=4)
+        ttk.Button(f, text="选目录", command=self._pick_mod_out).grid(row=9, column=2)
+
+        ttk.Button(f, text="运行", command=self._run_modify).grid(row=10, column=1, sticky="e", pady=8)
 
         log_frame = ttk.LabelFrame(parent, text="日志")
         log_frame.pack(fill="both", expand=True, padx=12, pady=8)
@@ -425,11 +467,7 @@ class App:
         seed_raw = self.mod_seed.get().strip()
         seed = int(seed_raw) if seed_raw else None
 
-        plate_old = self.mod_plate_old.get().strip()
-        plate_new = self.mod_plate_new.get().strip()
-        if (plate_old == "") != (plate_new == ""):
-            messagebox.showwarning("提示", "车牌替换: 旧车牌和新车牌要么都填, 要么都留空")
-            return
+        out_plate = self.mod_out_plate.get().strip()
 
         tpl = self.mod_tpl.get().strip() or "1modified.xls"
 
@@ -437,8 +475,8 @@ class App:
             time_offset_minutes=offset,
             time_jitter_seconds=jitter_s,
             temp_jitter=jitter_t,
-            plate_old=plate_old,
-            plate_new=plate_new,
+            output_plate=out_plate,
+            round_to_minute=self.mod_round_to_minute.get(),
             clamp_temp_to_0to4=self.mod_clamp.get(),
             filename_template=tpl,
             seed=seed,

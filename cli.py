@@ -52,6 +52,10 @@ def main() -> int:
         help="输出文件名模板, 支持 {direction}",
     )
     p_split.add_argument(
+        "--round-to-minute", action="store_true",
+        help="时间列秒清零, 同分钟内重复行丢弃",
+    )
+    p_split.add_argument(
         "--dry-run", action="store_true",
         help="只看会输出到哪里 / 多少行, 不真写文件 (输出目录若不存在也不会建)",
     )
@@ -75,6 +79,14 @@ def main() -> int:
         help="输出文件名模板, 支持 {plate}",
     )
     p_merge.add_argument(
+        "--output-plate", default=None,
+        help="强制输出车牌 (覆盖前后两份所有行 + {plate}); 不传 = 用日前首行的车牌",
+    )
+    p_merge.add_argument(
+        "--round-to-minute", action="store_true",
+        help="时间列秒清零, 同分钟内重复行丢弃 (最后一步)",
+    )
+    p_merge.add_argument(
         "--dry-run", action="store_true",
         help="只看会输出到哪里 / 多少行, 不真写文件",
     )
@@ -83,17 +95,17 @@ def main() -> int:
     p_md.add_argument("src", help="输入 .xls 路径")
 
     p_mod = sub.add_parser(
-        "modify", help="数据微改: 车牌替换 + 时间偏移/微抖 + 温度微变",
+        "modify", help="数据微改: 车牌覆盖 + 时间偏移/微抖 + 温度微变",
     )
     p_mod.add_argument("src", help="输入 .xls 路径")
     p_mod.add_argument("--out", required=True, help="输出目录")
     p_mod.add_argument(
-        "--plate-old", default="",
-        help="要替换的旧车牌 (整列等于该值才替换)",
+        "--output-plate", default="",
+        help="输出车牌 (留空 = 不改; 填了就整列覆盖)",
     )
     p_mod.add_argument(
-        "--plate-new", default="",
-        help="替换成的新车牌",
+        "--round-to-minute", action="store_true",
+        help="时间整点化: 秒清零 + 同分钟重复行丢弃",
     )
     p_mod.add_argument(
         "--time-offset-minutes", type=int, default=0,
@@ -132,6 +144,7 @@ def main() -> int:
             noon_cutoff=noon,
             clamp_temp_to_0to4=args.clamp_temp_to_0to4,
             filename_template=args.filename_template,
+            round_to_minute=args.round_to_minute,
             dry_run=args.dry_run,
         )
         prefix = "[DRY-RUN] 将输出: " if args.dry_run else "已输出: "
@@ -144,6 +157,8 @@ def main() -> int:
             time_gap_minutes=args.time_gap_minutes,
             clamp_temp_to_0to4=args.clamp_temp_to_0to4,
             filename_template=args.filename_template,
+            output_plate=args.output_plate,
+            round_to_minute=args.round_to_minute,
             dry_run=args.dry_run,
         )
         prefix = "[DRY-RUN] 将输出: " if args.dry_run else "已输出: "
@@ -160,8 +175,8 @@ def main() -> int:
             time_offset_minutes=args.time_offset_minutes,
             time_jitter_seconds=args.time_jitter_seconds,
             temp_jitter=args.temp_jitter,
-            plate_old=args.plate_old,
-            plate_new=args.plate_new,
+            output_plate=args.output_plate,
+            round_to_minute=args.round_to_minute,
             clamp_temp_to_0to4=args.clamp_temp_to_0to4,
             filename_template=args.filename_template,
             seed=args.seed,

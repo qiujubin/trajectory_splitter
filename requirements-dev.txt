@@ -1,0 +1,12 @@
+# trajectory_splitter dev / build 依赖
+#
+# 仅打包者需要装; 终端用户拿 .exe 不需要这些。
+#   pip install -r requirements-dev.txt
+#
+# 构建 v1.0 .exe:
+#   pyinstaller trajectory_splitter_web.spec --noconfirm --clean
+# 输出: dist/trajectory_splitter_web.exe (onefile)
+#
+# 当前 .venv 已装: pyinstaller 6.21.0, pyinstaller-hooks-contrib 2026.6
+pyinstaller>=6.0
+pyinstaller-hooks-contrib>=2024.1

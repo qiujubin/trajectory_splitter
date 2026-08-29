@@ -130,6 +130,7 @@ function wireSplitTab() {
       end_poi: $("#split-end-poi").value.trim(),
       noon: $("#split-noon").value.trim(),
       clamp: $("#split-clamp").checked,
+      round_to_minute: $("#split-round-to-minute").checked,
       tpl: $("#split-tpl").value.trim(),
     };
     if (!params.src || !params.out_dir) {
@@ -179,7 +180,9 @@ function wireMergeTab() {
       second: $("#merge-second").value.trim(),
       out_dir: $("#merge-out").value.trim(),
       gap_minutes: $("#merge-gap").value.trim(),
+      output_plate: $("#merge-output-plate").value.trim(),
       clamp: $("#merge-clamp").checked,
+      round_to_minute: $("#merge-round-to-minute").checked,
       tpl: $("#merge-tpl").value.trim(),
     };
     if (!params.first || !params.second || !params.out_dir) {
@@ -217,21 +220,17 @@ function wireModifyTab() {
     const params = {
       src: $("#mod-src").value.trim(),
       out_dir: $("#mod-out").value.trim(),
-      plate_old: $("#mod-plate-old").value.trim(),
-      plate_new: $("#mod-plate-new").value.trim(),
+      output_plate: $("#mod-output-plate").value.trim(),
       time_offset_minutes: $("#mod-offset").value.trim(),
       time_jitter_seconds: $("#mod-time-jitter").value.trim(),
       temp_jitter: $("#mod-temp-jitter").value.trim(),
       clamp: $("#mod-clamp").checked,
+      round_to_minute: $("#mod-round-to-minute").checked,
       seed: $("#mod-seed").value.trim(),
       tpl: $("#mod-tpl").value.trim(),
     };
     if (!params.src || !params.out_dir) {
       appendLog("[WARN] 源文件 / 输出目录都得填", "err");
-      return;
-    }
-    if ((!params.plate_old) !== (!params.plate_new)) {
-      appendLog("[WARN] 车牌替换: 旧车牌和新车牌要么都填, 要么都留空", "err");
       return;
     }
 

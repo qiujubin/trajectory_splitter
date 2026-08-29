@@ -5,9 +5,12 @@
      温度夹紧到 [0,4]
   2) 双文件拼接: 选两份 .xls, 无缝拼接, 时间接续, 文件名按参考文件夹命名
 
-启动 GUI:  python -m trajectory_splitter.gui
+启动 GUI:  python -m trajectory_splitter.gui            (Tk 老版)
+           python -m trajectory_splitter.web_gui        (浏览器质量版, pywebview)
 命令行:    python -m trajectory_splitter.cli split|merge|main-date ...
 """
+
+__version__ = "1.0.0"
 
 from trajectory_splitter.config import Settings, get_settings, reset_settings_cache
 from trajectory_splitter.logging_setup import configure as configure_logging, get_logger

@@ -17,6 +17,7 @@ POI 字符串可配置 (settings.yaml / 函数参数), 默认值是春梅里业�
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -271,6 +272,56 @@ def _time_at(row: list[Any], time_col: int | None) -> str:
     return str(row[time_col]) if row[time_col] is not None else ""
 
 
+def round_to_minute_drop_collisions(out_rows: list[list[Any]]) -> list[list[Any]]:
+    """整点化去重: 把 out_rows[1:] 时间列秒清零, 同分钟内后续重复行丢弃, 序号重排。
+
+    - 输入约定: out_rows[0] = 表头 (OUTPUT_COLUMNS), 之后是数据行
+    - 数据行时间列在 index 2 (= COL_TIME)
+    - 整点化前先按时间排序避免乱序丢行? 不: 调用方负责传入已排好序的行, 本函数不做排序
+    - 时间不可解析的行原样保留 (不参与整点化, 也不丢)
+    - 返回新 list (不修改入参)
+    """
+    if len(out_rows) <= 1:
+        return list(out_rows)
+
+    header = out_rows[0]
+    TIME_COL = 2
+    seen_minutes: set[tuple[int, int, int, int, int]] = set()
+    kept: list[list[Any]] = []
+    for row in out_rows[1:]:
+        if TIME_COL >= len(row):
+            kept.append(row)
+            continue
+        t = str(row[TIME_COL])[:19]
+        try:
+            dt = datetime.strptime(t, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            kept.append(row)
+            continue
+        key = (dt.year, dt.month, dt.day, dt.hour, dt.minute)
+        if key in seen_minutes:
+            logger.info(
+                "round_to_minute: 丢弃 %s (与已保留的同分钟行重复)",
+                t,
+            )
+            continue
+        seen_minutes.add(key)
+        new_row = list(row)
+        new_row[TIME_COL] = dt.strftime("%Y-%m-%d %H:%M:00")
+        kept.append(new_row)
+
+    # 序号重排
+    for i, row in enumerate(kept, start=1):
+        if row:
+            row[0] = i
+
+    logger.info(
+        "round_to_minute: 输入 %d 行, 去重保留 %d 行",
+        len(out_rows) - 1, len(kept),
+    )
+    return [header] + kept
+
+
 def split_at_poi(
     src_path: str | Path,
     direction: Direction,
@@ -281,6 +332,7 @@ def split_at_poi(
     noon_cutoff: str | None = "12:00:00",
     clamp_temp_to_0to4: bool = True,
     filename_template: str = "1{direction}.xls",
+    round_to_minute: bool = False,
     dry_run: bool = False,
 ) -> Path:
     """按 (start_poi, end_poi) 把 src_path 切成两段。
@@ -295,6 +347,7 @@ def split_at_poi(
         noon_cutoff="" 或 None  -> 不限时间, 取最后一次 start_poi
 
     默认 POI 取自 default_start_poi / default_end_poi (按 direction)。
+    round_to_minute=True 时: 时间列秒清零, 同分钟内后续重复行直接丢弃, 序号重排。
     dry_run=True 时不算 makedirs、不写文件, 只返回将输出的路径。
     """
     src_path = Path(src_path)
@@ -390,6 +443,9 @@ def split_at_poi(
 
     out_rows: list[list[Any]] = [OUTPUT_COLUMNS]
     out_rows.extend(_project_rows(selected, cols, temp_col, clamp_temp_to_0to4=clamp_temp_to_0to4))
+
+    if round_to_minute:
+        out_rows = round_to_minute_drop_collisions(out_rows)
 
     # 单文件切片 = 一辆车, 用首行车牌给 {plate} 占位符 (跟 merge/modifier 同套 sanitization 逻辑)
     plate_for_name = "unknown"

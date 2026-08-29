@@ -1,11 +1,12 @@
-"""数据微改: 输入 .xls → 输出 车牌替换 + 时间偏移/微抖 + 温度微变, 严格递增。
+"""数据微改: 输入 .xls → 输出 车牌覆盖 + 时间偏移/微抖 + 温度微变, 严格递增。
 
 不改业务列 (位置不动, 序号重排)。
 
 时间微抖: 整体偏移 (±N 分钟) + 每行正态微抖 (μ=0, σ=time_jitter_seconds),
          然后强制严格递增 (如果新时间 ≤ 上一行, 用上一行 + 1秒)。
+         round_to_minute=True 时: 秒清零 + 同分钟冲突行丢弃 (不走严格递增)。
 温度微变: 每行均匀随机 ±temp_jitter 度, 输出走 _clamp_temp 映射, 仍在 [0,4]。
-车牌替换: 纯字符串替换, 列里每一格的 cell 整串替换为新值。
+车牌覆盖: 直接把每一行的车牌列整列覆盖成 output_plate (留空 = 不改)。
 
 设置面板留默认值 (时间 ±5-30 秒, 温度 ±0.2-0.5 度)。
 """
@@ -46,8 +47,8 @@ class ModifyOptions:
     time_offset_minutes: int = 0       # 整体偏移 (分钟, 可正可负)
     time_jitter_seconds: float = 8.0   # 每行正态微抖 σ (秒), μ=0
     temp_jitter: float = 0.3           # 每行温度均匀随机 ±temp_jitter (度)
-    plate_old: str = ""                # 要替换的旧车牌 (空 = 不替换)
-    plate_new: str = ""                # 替换成的新车牌 (空 = 不替换)
+    output_plate: str = ""             # 输出车牌 (留空 = 不改; 填了就整列覆盖)
+    round_to_minute: bool = False      # 时间整点化: 秒清零 + 同分钟重复行丢弃
     filename_template: str = "1modified.xls"
     clamp_temp_to_0to4: bool = True    # 微变后再夹紧到 [0,4] 映射规则
     seed: int | None = None            # 随机种子 (None = 真随机)
@@ -102,21 +103,23 @@ def modify_xls(
     time_col = cols["time"]
     plate_col = cols["plate"]
 
-    # 1) 车牌替换
+    # 1) 车牌覆盖 (留空 = 不改)
     plate_changes = 0
-    if opts.plate_old and opts.plate_new:
+    if opts.output_plate:
         for row in data_rows:
-            if plate_col < len(row) and str(row[plate_col]) == opts.plate_old:
-                row[plate_col] = opts.plate_new
+            if plate_col < len(row):
+                row[plate_col] = opts.output_plate
                 plate_changes += 1
 
-    # 2) 时间: 整体偏移 + 每行正态微抖 + 严格递增
+    # 2) 时间: 整体偏移 + 每行正态微抖 + (整点化去重 / 严格递增)
     overall = timedelta(minutes=opts.time_offset_minutes)
     prev_dt: datetime | None = None
     parsed: list[tuple[datetime, float]] = []  # (原dt, 抖动秒数)
+    keep_mask: list[bool] = []                 # round_to_minute 时用来丢行
     for row in data_rows:
         if time_col >= len(row):
             parsed.append((datetime.min, 0.0))
+            keep_mask.append(False)
             continue
         raw = row[time_col]
         s = str(raw)[:19]
@@ -124,25 +127,39 @@ def modify_xls(
             dt = datetime.strptime(s, "%Y-%m-%d %H:%M:%S")
         except ValueError:
             parsed.append((datetime.min, 0.0))
+            keep_mask.append(False)
             continue
         # 正态微抖 (gauss σ)
         jitter = rng_normal.gauss(0.0, opts.time_jitter_seconds)
         new_dt = dt + overall + timedelta(seconds=jitter)
-        # 强制严格递增 (微抖后 + 整体偏移可能让个别行 < 上一行)
-        if prev_dt is not None and new_dt <= prev_dt:
-            new_dt = prev_dt + timedelta(seconds=1)
+
+        if opts.round_to_minute:
+            # 整点化: 秒清零 + 冲突丢行
+            new_dt = new_dt.replace(second=0, microsecond=0)
+            if prev_dt is not None and new_dt <= prev_dt:
+                parsed.append((datetime.min, 0.0))
+                keep_mask.append(False)
+                continue
+        else:
+            # 旧逻辑: 严格递增, 后推 1 秒
+            if prev_dt is not None and new_dt <= prev_dt:
+                new_dt = prev_dt + timedelta(seconds=1)
+
         parsed.append((new_dt, jitter))
+        keep_mask.append(True)
         prev_dt = new_dt
 
     # 3) 温度微变 (均匀随机 ±Y)
     out_rows: list[list[Any]] = [OUTPUT_COLUMNS]
+    seq = 1
+    dropped = 0
     for i, row in enumerate(data_rows):
+        if not keep_mask[i]:
+            dropped += 1
+            continue
         plate = row[plate_col] if plate_col < len(row) else ""
-        new_dt, _jitter = parsed[i] if i < len(parsed) else (datetime.min, 0.0)
-        if new_dt == datetime.min:
-            time_str = ""
-        else:
-            time_str = new_dt.strftime("%Y-%m-%d %H:%M:%S")
+        new_dt, _jitter = parsed[i]
+        time_str = new_dt.strftime("%Y-%m-%d %H:%M:%S")
         loc = row[cols["loc"]] if cols["loc"] < len(row) else ""
         loc = "" if loc is None else loc
 
@@ -160,7 +177,8 @@ def modify_xls(
                 except (TypeError, ValueError):
                     temp_val = base
 
-        out_rows.append([i + 1, plate, time_str, temp_val, loc])
+        out_rows.append([seq, plate, time_str, temp_val, loc])
+        seq += 1
 
     # 文件名: 车牌 (替换后的第一个) 走 {plate}
     first_plate = out_rows[1][1] if len(out_rows) > 1 else "unknown"
@@ -178,9 +196,9 @@ def modify_xls(
     out_path = out_dir / out_name
 
     logger.info(
-        "modify_xls: 车牌替换=%d 行 整体偏移=%+d 分钟 微抖σ=%.1f秒 温度±%.2f度 输出=%s 行=%d%s",
+        "modify_xls: 车牌替换=%d 行 整体偏移=%+d 分钟 微抖σ=%.1f秒 温度±%.2f度 整点化=%s 丢弃=%d 输出=%s 行=%d%s",
         plate_changes, opts.time_offset_minutes, opts.time_jitter_seconds,
-        opts.temp_jitter, out_path, len(out_rows),
+        opts.temp_jitter, opts.round_to_minute, dropped, out_path, len(out_rows),
         " (DRY-RUN)" if opts.dry_run else "",
     )
 

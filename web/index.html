@@ -70,6 +70,13 @@
       </div>
 
       <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" id="split-round-to-minute" />
+          整点化 (秒清零, 同分钟重复行丢弃)
+        </label>
+      </div>
+
+      <div class="field">
         <label for="split-tpl">
           输出文件名模板
         </label>
@@ -132,9 +139,24 @@
       </div>
 
       <div class="field">
+        <label for="merge-output-plate">
+          输出车牌
+          <span class="hint">留空 = 用前半首行的车牌；填了就覆盖前后两份所有行</span>
+        </label>
+        <input type="text" id="merge-output-plate" placeholder="（留空沿用前半车牌）" style="max-width: 200px;" />
+      </div>
+
+      <div class="field">
         <label class="checkbox">
           <input type="checkbox" id="merge-clamp" checked />
           夹紧温度到 [0,4]
+        </label>
+      </div>
+
+      <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" id="merge-round-to-minute" />
+          整点化 (秒清零, 同分钟重复行丢弃)
         </label>
       </div>
 
@@ -178,12 +200,11 @@
       </div>
 
       <div class="field">
-        <label>车牌: 旧 → 新<span class="hint">两格都填才替换 (整列相等才换)</span></label>
-        <div class="input-with-button">
-          <input type="text" id="mod-plate-old" placeholder="旧车牌" style="max-width: 200px;" />
-          <span style="align-self:center; color:var(--text-mute);">→</span>
-          <input type="text" id="mod-plate-new" placeholder="新车牌" style="max-width: 200px;" />
-        </div>
+        <label for="mod-output-plate">
+          输出车牌
+          <span class="hint">留空 = 不改；填了就覆盖所有行</span>
+        </label>
+        <input type="text" id="mod-output-plate" placeholder="（留空 = 不改）" style="max-width: 200px;" />
       </div>
 
       <div class="field">
@@ -214,6 +235,13 @@
         <label class="checkbox">
           <input type="checkbox" id="mod-clamp" checked />
           夹紧温度到 [0,4] (走分段映射规则)
+        </label>
+      </div>
+
+      <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" id="mod-round-to-minute" />
+          整点化 (秒清零, 同分钟重复行丢弃)
         </label>
       </div>
 

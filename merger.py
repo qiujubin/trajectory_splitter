@@ -33,6 +33,7 @@ from trajectory_splitter.splitter import (
     _project_rows,
     _read_main_sheet,
     pick_temperature_column,
+    round_to_minute_drop_collisions,
 )
 from trajectory_splitter.logging_setup import get_logger
 from trajectory_splitter.splitter import _DATE_FMT_RE, _format_filename, find_main_date
@@ -63,17 +64,22 @@ def merge_two(
     time_gap_minutes: int = 1,
     clamp_temp_to_0to4: bool = True,
     filename_template: str = "1日前.xls",
+    output_plate: str | None = None,
+    round_to_minute: bool = False,
     dry_run: bool = False,
 ) -> Path:
     """拼接两个 .xls (日前 + 后半), 时间接续, 温度夹紧。
 
     Args:
-        first_path: 日前 .xls (车牌号从该文件抽取)。
+        first_path: 日前 .xls (默认从该文件抽取车牌号)。
         second_path: 后半 .xls。
         out_dir: 输出目录。
         time_gap_minutes: 日后第一行新时间相对日前最后一条的间隔 (分钟)。
         clamp_temp_to_0to4: 温度超 [0,4] 是否夹紧。
-        filename_template: 输出文件名模板, 支持 {plate} (日前车牌)。
+        filename_template: 输出文件名模板, 支持 {plate}。
+        output_plate: 强制覆盖输出车牌 (覆盖前后两份所有行 + {plate} 占位符)。
+                       None = 沿用日前首行的车牌作为输出车牌 (向后兼容)。
+        round_to_minute: 时间列秒清零, 同分钟内重复行丢弃 (最后一步)。
     """
     first_path = Path(first_path)
     second_path = Path(second_path)
@@ -104,16 +110,23 @@ def merge_two(
     if not f_data:
         raise ValueError("前半文件无数据")
 
-    plate = f_data[0][f_cols["plate"]]
+    # 决定输出车牌: output_plate 优先, 否则用日前首行的车牌。
+    #   有 output_plate -> 覆盖前后两份所有行 (跨车拼接场景里这是用户希望的)
+    #   没有          -> 沿用日前首行的车牌, 把后半的车牌列也改成它 (旧行为, 向后兼容)
+    if output_plate:
+        plate = output_plate
+    else:
+        plate = f_data[0][f_cols["plate"]]
     safe_plate = _safe_for_filename(plate) or "unknown"
 
-    # 把后半所有行的车牌号统一改成前半的车牌 (跨车拼接场景)
-    if s_cols["plate"] is not None:
-        s_data = [
-            [plate if i == s_cols["plate"] else v for i, v in enumerate(row)]
-            for row in s_data
-        ]
-    s_cols["plate"] = f_cols["plate"]
+    # 把所有行 (前后两份) 的车牌号统一改成最终输出车牌
+    for cols, data in ((f_cols, f_data), (s_cols, s_data)):
+        if cols["plate"] is None:
+            continue
+        for row in data:
+            if cols["plate"] < len(row):
+                row[cols["plate"]] = plate
+        cols["plate"] = f_cols["plate"]
 
     f_temp_col = pick_temperature_column(f_data, f_cols["temp1"], f_cols["temp2"])
     s_temp_col = pick_temperature_column(s_data, s_cols["temp1"], s_cols["temp2"])
@@ -174,6 +187,9 @@ def merge_two(
         clamp_temp_to_0to4=clamp_temp_to_0to4, start_seq=len(f_out) + 1,
     )
     out_rows.extend(s_out)
+
+    if round_to_minute:
+        out_rows = round_to_minute_drop_collisions(out_rows)
 
     out_name = _format_filename(
         filename_template,
