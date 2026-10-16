@@ -30,6 +30,11 @@ hiddenimports = [
     'webview.platforms.winforms',
     'clr_loader',
     'pythonnet',
+    # xls_io 走 Excel COM 读写 .xls
+    'win32com',
+    'win32com.client',
+    'pythoncom',
+    'pywintypes',
 ]
 
 a = Analysis(

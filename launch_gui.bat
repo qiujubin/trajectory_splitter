@@ -4,7 +4,7 @@ REM Double-click this file to open the Tkinter window.
 REM
 REM Requires:
 REM   - e:\DuDao\project_weixiu\.venv\Scripts\python.exe
-REM   - xlrd / xlwt / pyyaml / tkinter (built-in)
+REM   - pywin32 (Excel COM) / pyyaml / tkinter (built-in)
 REM
 REM If the venv has moved, update VENV_PYTHON below.
 

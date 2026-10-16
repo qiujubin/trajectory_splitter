@@ -3,15 +3,13 @@
 # 装包 (项目根目录的 venv):
 #   "e:\DuDao\project_weixiu\.venv\Scripts\pip.exe" install -r requirements.txt
 #
-# 当前 .venv 已装: xlrd 2.0.2, yaml 6.0.3, tkinter (内置)
-# 缺:                   xlwt (写 .xls 必需)
+# 当前 .venv 已装: pywin32 312 (xls 读写走 Excel COM), yaml, tkinter (内置)
+# 注意: xls_io 走 COM, 运行机器必须装 Excel (或 WPS 表格)。
 #
-xlrd>=2.0.1,<2.1
-xlwt>=1.3.0
+pywin32>=306
 pyyaml>=6.0
 
 # web_gui 用的 pywebview (原生窗口跑 HTML 前端, 走系统自带 WebView2)。
 # Win 10/11 都预装了 WebView2, 不需要单独装运行时。
 # 仅 web_gui 用, 老 Tk GUI (gui.py) 不依赖。
 pywebview>=5.0
-

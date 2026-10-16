@@ -6,7 +6,7 @@ REM
 REM Requires:
 REM   - e:\DuDao\project_weixiu\.venv\Scripts\python.exe
 REM   - pywebview (already installed: 6.2.1)
-REM   - xlrd / xlwt / pyyaml / tkinter (built-in)
+REM   - pywin32 (Excel COM) / pyyaml / tkinter (built-in)
 REM   - Edge WebView2 runtime (built into Win 10/11; on Win 10 older builds,
 REM     install the Evergreen Runtime from Microsoft if missing)
 REM
