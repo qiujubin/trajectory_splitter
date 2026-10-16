@@ -108,12 +108,18 @@ class Api:
         """运行双文件拼接。
 
         params keys: first, second, out_dir, gap_minutes, output_plate,
-                     clamp, round_to_minute, tpl
+                     clamp, round_to_minute, tpl,
+                     preserve_endpoints, squeeze_rows
         """
         try:
             gap_str = (params.get("gap_minutes") or "").strip() or "1"
             gap = int(gap_str)
             out_plate = (params.get("output_plate") or "").strip() or None
+            squeeze_str = (params.get("squeeze_rows") or "").strip() or "10"
+            squeeze_rows = int(squeeze_str)
+            if squeeze_rows < 0:
+                raise ValueError("压接行数必须 >= 0")
+            preserve_endpoints = bool(params.get("preserve_endpoints", False))
             out_path = merge_two(
                 params["first"],
                 params["second"],
@@ -123,8 +129,12 @@ class Api:
                 filename_template=(params.get("tpl") or "1日前.xls"),
                 output_plate=out_plate,
                 round_to_minute=bool(params.get("round_to_minute", False)),
+                preserve_endpoints=preserve_endpoints,
+                squeeze_rows=squeeze_rows,
             )
             return {"ok": True, "out_path": str(out_path)}
+        except ValueError as e:
+            return {"ok": False, "error": f"参数错误: {e}"}
         except Exception as e:  # noqa: BLE001
             return {"ok": False, "error": str(e)}
 

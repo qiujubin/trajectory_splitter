@@ -1,4 +1,7 @@
-"""Tkinter GUI: 两个 Tab — 单文件切片 (按 start_poi/end_poi) + 双文件拼接。
+"""Tkinter GUI: 三个 Tab — 单文件切片 / 双文件拼接 / 数据微改。
+
+运行类按钮都在后台线程执行 (窗口不冻结), 结束后经 root.after 回
+主线程弹结果。
 
 启动:  python -m trajectory_splitter.gui
 """
@@ -6,6 +9,7 @@
 from __future__ import annotations
 
 import sys
+import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
@@ -31,6 +35,7 @@ SPLIT_KEYS: list[str] = [
 MERGE_KEYS: list[str] = [
     "merge_first", "merge_second", "merge_gap",
     "merge_clamp", "merge_round_to_minute",
+    "merge_preserve_endpoints", "merge_squeeze_rows",
     "merge_tpl", "merge_out",
 ]
 MODIFY_KEYS: list[str] = [
@@ -81,6 +86,51 @@ class App:
     def _on_close(self) -> None:
         save_state(self._snapshot_state())
         self.root.destroy()
+
+    # ---------------- 后台执行 ----------------
+    def _run_bg(
+        self,
+        btn: ttk.Button,
+        busy_text: str,
+        fn,
+        on_success,
+        *,
+        err_title: str,
+        log_fn=None,
+    ) -> None:
+        """后台线程跑 fn: 期间按钮置灰+改文案, 结束后回主线程收尾。
+
+        Tk 控件只能在主线程碰, 所以后台线程只写线程安全的 Event/列表,
+        主线程用 after 轮询取结果 — 不做任何跨线程 Tk 调用
+        (跨线程调 root.after 只在 mainloop 活着时可用, update 泵会炸)。
+        """
+        original = str(btn.cget("text"))
+        btn.configure(state="disabled", text=busy_text)
+        box: list[tuple[bool, object]] = []
+        finished = threading.Event()
+
+        def _work() -> None:
+            try:
+                box.append((True, fn()))
+            except BaseException as e:  # noqa: BLE001
+                box.append((False, e))
+            finished.set()
+
+        def _poll() -> None:
+            if not finished.is_set():
+                self.root.after(50, _poll)
+                return
+            btn.configure(state="normal", text=original)
+            ok, payload = box[0]
+            if ok:
+                on_success(payload)
+                return
+            if log_fn is not None:
+                log_fn(f"[ERR] {payload}")
+            messagebox.showerror(err_title, str(payload))
+
+        self.root.after(50, _poll)
+        threading.Thread(target=_work, daemon=True).start()
 
     # ---------------- 单文件切片 ----------------
     def _build_split_tab(self, parent: ttk.Frame) -> None:
@@ -162,12 +212,10 @@ class App:
         ttk.Entry(f, textvariable=self.split_out, width=55).grid(row=8, column=1, padx=4)
         ttk.Button(f, text="选目录", command=self._pick_split_out).grid(row=8, column=2)
 
-        ttk.Button(f, text="预览主要日期", command=self._preview_split).grid(
-            row=9, column=1, sticky="w", pady=8,
-        )
-        ttk.Button(f, text="运行", command=self._run_split).grid(
-            row=9, column=1, sticky="e", pady=8,
-        )
+        self.split_preview_btn = ttk.Button(f, text="预览主要日期", command=self._preview_split)
+        self.split_preview_btn.grid(row=9, column=1, sticky="w", pady=8)
+        self.split_run_btn = ttk.Button(f, text="运行", command=self._run_split)
+        self.split_run_btn.grid(row=9, column=1, sticky="e", pady=8)
 
         self.split_info = ttk.Label(f, text="(未选文件)", foreground="gray")
         self.split_info.grid(row=10, column=1, sticky="w")
@@ -203,16 +251,21 @@ class App:
         if not src:
             messagebox.showwarning("提示", "先选输入文件")
             return
-        try:
-            main_date, count = find_main_date(src)
-        except Exception as e:  # noqa: BLE001
-            messagebox.showerror("读文件失败", str(e))
-            return
-        msg = f"主要日期: {main_date}\n该日记录数: {count}"
-        self.split_info.config(
-            text=f"主要日期 = {main_date} ({count} 条)", foreground="blue",
+
+        def _job():
+            return find_main_date(src)
+
+        def _ok(result):
+            main_date, count = result
+            self.split_info.config(
+                text=f"主要日期 = {main_date} ({count} 条)", foreground="blue",
+            )
+            messagebox.showinfo("主要日期", f"主要日期: {main_date}\n该日记录数: {count}")
+
+        self._run_bg(
+            self.split_preview_btn, "读取中...", _job, _ok,
+            err_title="读文件失败",
         )
-        messagebox.showinfo("主要日期", msg)
 
     def _run_split(self) -> None:
         src = self.split_src.get().strip()
@@ -233,8 +286,8 @@ class App:
         if direction == "后半" and not start_poi:
             messagebox.showwarning("提示", "direction='后半' 必须指定 start_poi (后半段起点)")
             return
-        try:
-            out_path = split_at_poi(
+        def _job():
+            return split_at_poi(
                 src, direction, out_dir,
                 start_poi=start_poi,
                 end_poi=end_poi,
@@ -243,13 +296,15 @@ class App:
                 filename_template=tpl,
                 round_to_minute=round_to_minute,
             )
-        except Exception as e:  # noqa: BLE001
-            messagebox.showerror("切片失败", str(e))
-            self._log_split(f"[ERR] {e}")
-            return
-        msg = f"已输出: {out_path}"
-        self._log_split(msg)
-        messagebox.showinfo("完成", msg)
+
+        def _ok(out_path):
+            self._log_split(f"已输出: {out_path}")
+            messagebox.showinfo("完成", f"已输出: {out_path}")
+
+        self._run_bg(
+            self.split_run_btn, "运行中...", _job, _ok,
+            err_title="切片失败", log_fn=self._log_split,
+        )
 
     def _log_split(self, msg: str) -> None:
         self.split_log.insert("end", msg + "\n")
@@ -266,6 +321,8 @@ class App:
         self.merge_out_plate = tk.StringVar()
         self.merge_clamp = tk.BooleanVar(value=True)
         self.merge_round_to_minute = tk.BooleanVar(value=False)
+        self.merge_preserve_endpoints = tk.BooleanVar(value=False)
+        self.merge_squeeze_rows = tk.StringVar(value="10")
         self.merge_tpl = tk.StringVar(value="1日前.xls")
         self.merge_out = tk.StringVar()
 
@@ -305,20 +362,33 @@ class App:
             row=5, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(
+        ttk.Label(f, text="保留端点 (A 开头 + B 结尾, 中间压接):").grid(
             row=6, column=0, sticky="w", pady=4,
         )
-        ttk.Entry(f, textvariable=self.merge_tpl, width=30).grid(
+        ttk.Checkbutton(f, variable=self.merge_preserve_endpoints).grid(
             row=6, column=1, sticky="w", padx=4,
         )
 
-        ttk.Label(f, text="输出目录:").grid(row=7, column=0, sticky="w", pady=4)
-        ttk.Entry(f, textvariable=self.merge_out, width=55).grid(row=7, column=1, padx=4)
-        ttk.Button(f, text="选目录", command=self._pick_merge_out).grid(row=7, column=2)
-
-        ttk.Button(f, text="运行", command=self._run_merge).grid(
-            row=8, column=1, sticky="e", pady=8,
+        ttk.Label(f, text="压接行数 (每边, 仅保留端点模式生效, 默认 10):").grid(
+            row=7, column=0, sticky="w", pady=4,
         )
+        ttk.Entry(f, textvariable=self.merge_squeeze_rows, width=10).grid(
+            row=7, column=1, sticky="w", padx=4,
+        )
+
+        ttk.Label(f, text="输出文件名模板 (用 {plate} / {date}):").grid(
+            row=8, column=0, sticky="w", pady=4,
+        )
+        ttk.Entry(f, textvariable=self.merge_tpl, width=30).grid(
+            row=8, column=1, sticky="w", padx=4,
+        )
+
+        ttk.Label(f, text="输出目录:").grid(row=9, column=0, sticky="w", pady=4)
+        ttk.Entry(f, textvariable=self.merge_out, width=55).grid(row=9, column=1, padx=4)
+        ttk.Button(f, text="选目录", command=self._pick_merge_out).grid(row=9, column=2)
+
+        self.merge_run_btn = ttk.Button(f, text="运行", command=self._run_merge)
+        self.merge_run_btn.grid(row=10, column=1, sticky="e", pady=8)
 
         log_frame = ttk.LabelFrame(parent, text="日志")
         log_frame.pack(fill="both", expand=True, padx=12, pady=8)
@@ -347,6 +417,8 @@ class App:
         out_plate = self.merge_out_plate.get().strip() or None
         clamp = self.merge_clamp.get()
         round_to_minute = self.merge_round_to_minute.get()
+        preserve_endpoints = self.merge_preserve_endpoints.get()
+        squeeze_rows_str = self.merge_squeeze_rows.get().strip() or "10"
         tpl = self.merge_tpl.get().strip() or "1日前.xls"
         out_dir = self.merge_out.get().strip()
         if not all([first, second, gap_str, out_dir]):
@@ -358,21 +430,32 @@ class App:
             messagebox.showerror("错误", "时间间隔必须是整数分钟")
             return
         try:
-            out_path = merge_two(
+            squeeze_rows = int(squeeze_rows_str)
+            if squeeze_rows < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("错误", "压接行数必须是非负整数")
+            return
+        def _job():
+            return merge_two(
                 first, second, out_dir,
                 time_gap_minutes=gap,
                 clamp_temp_to_0to4=clamp,
                 filename_template=tpl,
                 output_plate=out_plate,
                 round_to_minute=round_to_minute,
+                preserve_endpoints=preserve_endpoints,
+                squeeze_rows=squeeze_rows,
             )
-        except Exception as e:  # noqa: BLE001
-            messagebox.showerror("拼接失败", str(e))
-            self._log_merge(f"[ERR] {e}")
-            return
-        msg = f"已输出: {out_path}"
-        self._log_merge(msg)
-        messagebox.showinfo("完成", msg)
+
+        def _ok(out_path):
+            self._log_merge(f"已输出: {out_path}")
+            messagebox.showinfo("完成", f"已输出: {out_path}")
+
+        self._run_bg(
+            self.merge_run_btn, "拼接中...", _job, _ok,
+            err_title="拼接失败", log_fn=self._log_merge,
+        )
 
     def _log_merge(self, msg: str) -> None:
         self.merge_log.insert("end", msg + "\n")
@@ -442,7 +525,8 @@ class App:
         ttk.Entry(f, textvariable=self.mod_out, width=55).grid(row=10, column=1, padx=4)
         ttk.Button(f, text="选目录", command=self._pick_mod_out).grid(row=10, column=2)
 
-        ttk.Button(f, text="运行", command=self._run_modify).grid(row=11, column=1, sticky="e", pady=8)
+        self.mod_run_btn = ttk.Button(f, text="运行", command=self._run_modify)
+        self.mod_run_btn.grid(row=11, column=1, sticky="e", pady=8)
 
         log_frame = ttk.LabelFrame(parent, text="日志")
         log_frame.pack(fill="both", expand=True, padx=12, pady=8)
@@ -491,15 +575,17 @@ class App:
             filename_template=tpl,
             seed=seed,
         )
-        try:
-            out_path = modify_xls(src, out_dir, opts)
-        except Exception as e:  # noqa: BLE001
-            messagebox.showerror("微改失败", str(e))
-            self._log_mod(f"[ERR] {e}")
-            return
-        msg = f"已输出: {out_path}"
-        self._log_mod(msg)
-        messagebox.showinfo("完成", msg)
+        def _job():
+            return modify_xls(src, out_dir, opts)
+
+        def _ok(out_path):
+            self._log_mod(f"已输出: {out_path}")
+            messagebox.showinfo("完成", f"已输出: {out_path}")
+
+        self._run_bg(
+            self.mod_run_btn, "微改中...", _job, _ok,
+            err_title="微改失败", log_fn=self._log_mod,
+        )
 
     def _log_mod(self, msg: str) -> None:
         self.mod_log.insert("end", msg + "\n")

@@ -87,6 +87,20 @@ def main() -> int:
         help="时间列秒清零, 同分钟内重复行丢弃 (最后一步)",
     )
     p_merge.add_argument(
+        "--preserve-endpoints", dest="preserve_endpoints", action="store_true",
+        help="保留 A 开头 + B 结尾: A 末 K 行 + B 首 K 行时间戳均匀压接, "
+             "B 必要时整段日期前移 (时分秒不变)",
+    )
+    p_merge.add_argument(
+        "--no-preserve-endpoints", dest="preserve_endpoints", action="store_false",
+        help="(默认) 走 B 整体偏移模式",
+    )
+    p_merge.set_defaults(preserve_endpoints=False)
+    p_merge.add_argument(
+        "--squeeze-rows", type=int, default=10,
+        help="压接行数 (每边), 仅 --preserve-endpoints 时生效, 默认 10",
+    )
+    p_merge.add_argument(
         "--dry-run", action="store_true",
         help="只看会输出到哪里 / 多少行, 不真写文件",
     )
@@ -163,6 +177,8 @@ def main() -> int:
             filename_template=args.filename_template,
             output_plate=args.output_plate,
             round_to_minute=args.round_to_minute,
+            preserve_endpoints=args.preserve_endpoints,
+            squeeze_rows=args.squeeze_rows,
             dry_run=args.dry_run,
         )
         prefix = "[DRY-RUN] 将输出: " if args.dry_run else "已输出: "

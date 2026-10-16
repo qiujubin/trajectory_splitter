@@ -110,6 +110,7 @@ def modify_xls(
     # 1) 主要日期平移 (留空 = 不改): 计算 delta = new - old, 整列 +delta 天
     #    只动日期, 时分秒不动; 不同日期的行一起平移, 保持相对间距
     date_delta = timedelta(0)
+    old_main_date_str: str | None = None
     if opts.output_main_date:
         try:
             old_main_date_str, _ = find_main_date(src_path)
@@ -204,13 +205,19 @@ def modify_xls(
         out_rows.append([seq, plate, time_str, temp_val, loc])
         seq += 1
 
-    # 文件名: 车牌 (替换后的第一个) 走 {plate}
+    # 文件名: 标题日期走用户填的 output_main_date (留空时退回源主要日期); 走 {plate} 走替换后第一个
     first_plate = out_rows[1][1] if len(out_rows) > 1 else "unknown"
     safe_plate = "".join(c for c in str(first_plate) if c.isalnum() or c in "_-") or "unknown"
+    if opts.output_main_date:
+        effective_date: str = opts.output_main_date
+    elif old_main_date_str is not None:
+        effective_date = old_main_date_str
+    else:
+        effective_date = find_main_date(src_path)[0]
     out_name = _format_filename(
         opts.filename_template,
         plate=safe_plate,
-        date=find_main_date(src_path)[0] if _DATE_FMT_RE.search(opts.filename_template) else None,
+        date=effective_date if _DATE_FMT_RE.search(opts.filename_template) else None,
     )
     # modify 模板里没有 {direction} 语义
     if "{direction}" in out_name or "{direction:" in out_name:

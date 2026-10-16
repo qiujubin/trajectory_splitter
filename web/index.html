@@ -161,6 +161,22 @@
       </div>
 
       <div class="field">
+        <label class="checkbox">
+          <input type="checkbox" id="merge-preserve-endpoints" />
+          保留端点 (A 开头 + B 结尾, 中间压接)
+          <span class="hint">勾上后 B 整段不再整体偏移, 时分秒不变, 仅日期可能前移</span>
+        </label>
+      </div>
+
+      <div class="field">
+        <label for="merge-squeeze-rows">
+          压接行数 (每边)
+          <span class="hint">仅保留端点模式生效, 默认 10</span>
+        </label>
+        <input type="number" id="merge-squeeze-rows" value="10" min="0" max="100" style="max-width: 140px;" />
+      </div>
+
+      <div class="field">
         <label for="merge-tpl">
           输出文件名模板
         </label>

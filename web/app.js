@@ -183,6 +183,8 @@ function wireMergeTab() {
       output_plate: $("#merge-output-plate").value.trim(),
       clamp: $("#merge-clamp").checked,
       round_to_minute: $("#merge-round-to-minute").checked,
+      preserve_endpoints: $("#merge-preserve-endpoints").checked,
+      squeeze_rows: $("#merge-squeeze-rows").value.trim(),
       tpl: $("#merge-tpl").value.trim(),
     };
     if (!params.first || !params.second || !params.out_dir) {
